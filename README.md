@@ -78,7 +78,7 @@ Paste this prompt into the Codex chat where you want notifications and autonomou
 > Install Slurm Monitor from https://github.com/liyang-tju/codex-slurm-monitor and verify that both the background worker and this chat's notification connection are available. Watch Slurm jobs 8123 and 8124: once both finish, check their output convergence — if converged, prepare and submit the next-stage calculation and keep watching; if either fails or hits OOM, inspect the logs, adjust resources, and resubmit.
 
 > [!NOTE]
-> For a private repository, the account running Codex needs read access. If newly installed MCP tools are not yet visible in the current chat, Codex can register the watch immediately via the installed stdio entry point (`~/.local/share/codex-slurm-monitor/bin/python -I -m slurm_monitor.server`) using the chat's `CODEX_THREAD_ID`.
+> If newly installed MCP tools are not yet visible in the current chat, Codex can register the watch immediately via the installed stdio entry point (`~/.local/share/codex-slurm-monitor/bin/python -I -m slurm_monitor.server`) using the chat's `CODEX_THREAD_ID`.
 
 ### Option 2: Manual Installation
 

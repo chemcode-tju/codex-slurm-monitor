@@ -78,7 +78,7 @@ flowchart LR
 > 请从 https://github.com/liyang-tju/codex-slurm-monitor 安装 Slurm Monitor，检查后台服务和当前聊天的通知连接是否就绪。帮我监控 Slurm 作业 8123 和 8124：等两个都结束后检查输出收敛情况——如果收敛，准备并提交下一阶段计算且继续监控；如果失败或 OOM，排查日志并调整资源后重新提交。
 
 > [!NOTE]
-> 仓库为私有时，运行 Codex 的账号需要有仓库读取权限。如果刚安装的 MCP 工具尚未在当前聊天刷新显示，Codex 可直接通过已安装的 stdio 入口（`~/.local/share/codex-slurm-monitor/bin/python -I -m slurm_monitor.server`）携带当前聊天的 `CODEX_THREAD_ID` 调用 `monitor_watch` 完成登记。
+> 如果刚安装的 MCP 工具尚未在当前聊天刷新显示，Codex 可直接通过已安装的 stdio 入口（`~/.local/share/codex-slurm-monitor/bin/python -I -m slurm_monitor.server`）携带当前聊天的 `CODEX_THREAD_ID` 调用 `monitor_watch` 完成登记。
 
 ### 方式二：手动安装
 
