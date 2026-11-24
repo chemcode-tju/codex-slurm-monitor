@@ -75,7 +75,7 @@ flowchart LR
 
 把下面这段话直接发到你希望收到提醒并自动续跑的 Codex 对话中（把作业号与规则换成你的实际需求；如果只想安装，保留第一句即可）：
 
-> 请从 https://github.com/liyang-tju/codex-slurm-monitor 安装 Slurm Monitor，检查后台服务和当前聊天的通知连接是否就绪。帮我监控 Slurm 作业 8123 和 8124：等两个都结束后检查输出收敛情况——如果收敛，准备并提交下一阶段计算且继续监控；如果失败或 OOM，排查日志并调整资源后重新提交。
+> 请从 https://github.com/chemcode-tju/codex-slurm-monitor 安装 Slurm Monitor，检查后台服务和当前聊天的通知连接是否就绪。帮我监控 Slurm 作业 8123 和 8124：等两个都结束后检查输出收敛情况——如果收敛，准备并提交下一阶段计算且继续监控；如果失败或 OOM，排查日志并调整资源后重新提交。
 
 > [!NOTE]
 > 如果刚安装的 MCP 工具尚未在当前聊天刷新显示，Codex 可直接通过已安装的 stdio 入口（`~/.local/share/codex-slurm-monitor/bin/python -I -m slurm_monitor.server`）携带当前聊天的 `CODEX_THREAD_ID` 调用 `monitor_watch` 完成登记。
@@ -85,7 +85,7 @@ flowchart LR
 在**运行目标 Codex 聊天的主机**上执行。需要 **Python 3.11+**、支持 `codex plugin add` 的 **Codex CLI**，以及可访问 Slurm 的 `squeue` / `sacct`：
 
 ```sh
-gh repo clone liyang-tju/codex-slurm-monitor
+gh repo clone chemcode-tju/codex-slurm-monitor
 cd codex-slurm-monitor
 python3 install.py
 ```
