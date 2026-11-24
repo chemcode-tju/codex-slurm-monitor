@@ -1,6 +1,85 @@
 # Codex Slurm Monitor
 
-[中文](#中文) · [English](#english)
+[English](#english) · [中文](#中文)
+
+## English
+
+Tell Codex “Watch Slurm jobs 8123 and 8124 and let me know here when both finish.” Codex registers the job IDs once. A background worker checks Slurm without calling a model while it waits. When the condition is met, the worker starts a turn in the same chat. You can also say “Tell me when it finishes” when asking Codex to submit a job.
+
+### Installation
+
+**Ask Codex to install the plugin and monitor your jobs.** Paste this into the chat where you want the notification and replace the sample IDs with yours. For installation only, use the first sentence.
+
+> Install Slurm Monitor from https://github.com/liyang-tju/codex-slurm-monitor and check that the background worker and this chat’s notification connection are available. Watch Slurm jobs 8123 and 8124 and tell me each job’s state and exit code in this chat once both finish.
+
+For a private repository, the account running Codex needs read access. Codex gets the notification destination from the current chat. If the newly installed tools are not yet visible in that chat, Codex can call `monitor_watch` through the installed MCP stdio entry point (`~/.local/share/codex-slurm-monitor/bin/python -I -m slurm_monitor.server`) with the chat’s `CODEX_THREAD_ID`. After registration, Codex reports which jobs it is watching and what will trigger the reminder.
+
+**Manual installation.** Run the following on the host running the target Codex chat. You need Python 3.11 or later, a Codex CLI with `codex plugin add`, and access to Slurm’s `squeue` and `sacct`. On a Linux cluster the worker runs as a systemd user service on the login node. On macOS it runs as a LaunchAgent. For a remote Codex chat, install on the remote host.
+
+```sh
+gh repo clone liyang-tju/codex-slurm-monitor
+cd codex-slurm-monitor
+python3 install.py
+```
+
+The installer creates an isolated Python environment, installs the plugin with its bundled Skill, starts the worker and prints `worker_running` and `socket_present`. Open a new chat to load the tools. When both flags are `true`, the worker is running and the control socket exists. You can check an individual notification’s delivery receipt in chat. To update, run `git pull` in the checkout and rerun the installer. It preserves personal settings and existing watches.
+
+If `socket_present` is `false`, check the Unix WebSocket address of the Codex App Server that owns the chat. The default is `~/.codex/app-server-control/app-server-control.sock`. On hosts using the Codex-managed daemon, start it with `codex app-server daemon start`. Set `control_socket` in your personal configuration if the address differs. Chat delivery requires an App Server that supports `thread/queue/add` and `thread/queue/start`. Desktop sessions with only a stdio connection can use manual lookup or a webhook.
+
+### Usage
+
+| Say to Codex | What happens |
+| --- | --- |
+| Watch job 8123. | The chat receives a reminder when the job reaches a terminal state. |
+| Tell me as soon as either 8123 or 8124 finishes. | The first terminal job triggers one reminder. |
+| Change that reminder to “List the exit codes and log locations.” | Updates the instructions for a group that is still waiting. |
+| Which jobs am I waiting for? | Shows job IDs, scheduler states, exit codes and delivery status. |
+| Open the job monitor panel. | Opens a refreshable view alongside the chat. |
+| Cancel that reminder. | Cancels the watch. The Slurm jobs keep running. |
+
+Multiple chats can watch the same job. Repeating a registration in the same chat with the same host, job group, condition and delivery mode returns the existing watch. For an array task, supply a member ID such as `8123_4` or its allocation ID. To watch the whole array, supply the individual member IDs. Each watch fires once.
+
+### Custom reminders
+
+By default the notification contains the structured event, including job IDs, scheduler states, exit codes and the event ID. Tell Codex what to do when the jobs finish to set that group’s reminder in your own words. To use personal default wording, edit `~/.config/codex-slurm-monitor/config.toml`:
+
+```toml
+prompt = ""
+```
+
+An explicit per-watch prompt takes precedence. An explicitly empty string sends only the event. Each watch saves its prompt at registration, so a change to the global default applies to new watches. To change how the Skill registers jobs, edit its instructions and rerun the installer. [Skill instructions](plugins/slurm-monitor/skills/slurm-monitor/SKILL.md)
+
+### Optional settings
+
+The worker polls local Slurm every 30 seconds by default. To watch multiple clusters from one Codex host, add existing SSH aliases to `ssh_hosts`. For example, after setting it to `["cluster-a"]`, say “Watch job 8123 on cluster-a.” Queue queries over SSH must work without interaction. Restart the worker after changing the hosts, polling interval, socket or webhook settings. [Configuration reference](config.toml)
+
+The default delivery mode is `codex`. Choose `pull` for manual lookup or `webhook` to send JSON to the `webhook_url` in your personal configuration. Set `webhook_secret` to sign the raw request body with HMAC-SHA256. The signature header is `X-Slurm-Monitor-Signature: sha256=…`. The worker retries explicit transient HTTP errors a limited number of times. A lost connection after sending produces an `uncertain` receipt. Receivers should deduplicate by `event_id`. The URL, signing secret and proxy address belong in the personal configuration file.
+
+### Operation and recovery
+
+- **Linux.** Check `systemctl --user status codex-slurm-monitor`, restart with `systemctl --user restart codex-slurm-monitor`, and read logs with `journalctl --user -u codex-slurm-monitor`. If the service must survive SSH logout, enable user lingering according to your cluster’s policy.
+- **macOS.** Restart with `launchctl kickstart -k "gui/$(id -u)/org.codex.slurm-monitor"`. Logs are in `~/.local/share/codex-slurm-monitor/worker.log`.
+- **Other process managers.** Set `manage_service = False` at the top of the installer and run the worker command it prints under your process manager.
+- **Offline nodes.** Prepare a directory of wheels on an online machine with the same operating system, CPU architecture and Python version. Include the package dependencies, setuptools and wheel. Run the installer with `PIP_NO_INDEX=1` and `PIP_FIND_LINKS` pointing to that directory.
+
+The MCP tools and the worker share a per-user SQLite database. When a job disappears from the queue, the worker waits for a matching `sacct` record before emitting a terminal event. Accounting delays and query errors appear as `UNKNOWN`. The scheduler state and exit code describe job execution. Assessing scientific convergence requires examining the output. [Slurm job states](https://slurm.schedmd.com/job_state_codes.html) · [sacct fields](https://slurm.schedmd.com/sacct.html)
+
+The database stores the event, delivery receipt and acknowledgement separately. The worker waits when the target chat is busy. After a restart it checks the message ID, queue and chat history before delivering. If it cannot establish whether a notification arrived, it records `uncertain` for review. The service reads Slurm state and manages notifications. Job submission, reruns and scheduler cancellation are outside its interface.
+
+### Uninstall
+
+On Linux, first run `systemctl --user disable --now codex-slurm-monitor`. On macOS, run `launchctl bootout "gui/$(id -u)/org.codex.slurm-monitor"`. Then remove the plugin and its marketplace:
+
+```sh
+codex plugin remove slurm-monitor@slurm-tools
+codex plugin marketplace remove slurm-tools
+```
+
+Personal configuration is in `~/.config/codex-slurm-monitor/`. The runtime and history are in `~/.local/share/codex-slurm-monitor/`. If several cluster nodes share the same home directory, run the worker on one designated host. When migrating from an older service, register the jobs you still want to watch and cancel the corresponding old reminders to avoid duplicate notifications.
+
+### Tests
+
+From the repository root, run `python -m pytest -q data/tests` in an environment with the dependencies and pytest installed. The tests use temporary databases and isolated scheduler, chat and webhook responses.
 
 ## 中文
 
@@ -82,82 +161,3 @@ codex plugin marketplace remove slurm-tools
 ### 测试
 
 在已安装依赖和 pytest 的环境中，从仓库根目录运行 `python -m pytest -q data/tests`。测试使用临时数据库和隔离的调度器、聊天及 Webhook 响应。
-
-## English
-
-Tell Codex “Watch Slurm jobs 8123 and 8124 and let me know here when both finish.” Codex registers the job IDs once. A background worker checks Slurm without calling a model while it waits. When the condition is met, the worker starts a turn in the same chat. You can also say “Tell me when it finishes” when asking Codex to submit a job.
-
-### Installation
-
-**Ask Codex to install the plugin and monitor your jobs.** Paste this into the chat where you want the notification and replace the sample IDs with yours. For installation only, use the first sentence.
-
-> Install Slurm Monitor from https://github.com/liyang-tju/codex-slurm-monitor and check that the background worker and this chat’s notification connection are available. Watch Slurm jobs 8123 and 8124 and tell me each job’s state and exit code in this chat once both finish.
-
-For a private repository, the account running Codex needs read access. Codex gets the notification destination from the current chat. If the newly installed tools are not yet visible in that chat, Codex can call `monitor_watch` through the installed MCP stdio entry point (`~/.local/share/codex-slurm-monitor/bin/python -I -m slurm_monitor.server`) with the chat’s `CODEX_THREAD_ID`. After registration, Codex reports which jobs it is watching and what will trigger the reminder.
-
-**Manual installation.** Run the following on the host running the target Codex chat. You need Python 3.11 or later, a Codex CLI with `codex plugin add`, and access to Slurm’s `squeue` and `sacct`. On a Linux cluster the worker runs as a systemd user service on the login node. On macOS it runs as a LaunchAgent. For a remote Codex chat, install on the remote host.
-
-```sh
-gh repo clone liyang-tju/codex-slurm-monitor
-cd codex-slurm-monitor
-python3 install.py
-```
-
-The installer creates an isolated Python environment, installs the plugin with its bundled Skill, starts the worker and prints `worker_running` and `socket_present`. Open a new chat to load the tools. When both flags are `true`, the worker is running and the control socket exists. You can check an individual notification’s delivery receipt in chat. To update, run `git pull` in the checkout and rerun the installer. It preserves personal settings and existing watches.
-
-If `socket_present` is `false`, check the Unix WebSocket address of the Codex App Server that owns the chat. The default is `~/.codex/app-server-control/app-server-control.sock`. On hosts using the Codex-managed daemon, start it with `codex app-server daemon start`. Set `control_socket` in your personal configuration if the address differs. Chat delivery requires an App Server that supports `thread/queue/add` and `thread/queue/start`. Desktop sessions with only a stdio connection can use manual lookup or a webhook.
-
-### Usage
-
-| Say to Codex | What happens |
-| --- | --- |
-| Watch job 8123. | The chat receives a reminder when the job reaches a terminal state. |
-| Tell me as soon as either 8123 or 8124 finishes. | The first terminal job triggers one reminder. |
-| Change that reminder to “List the exit codes and log locations.” | Updates the instructions for a group that is still waiting. |
-| Which jobs am I waiting for? | Shows job IDs, scheduler states, exit codes and delivery status. |
-| Open the job monitor panel. | Opens a refreshable view alongside the chat. |
-| Cancel that reminder. | Cancels the watch. The Slurm jobs keep running. |
-
-Multiple chats can watch the same job. Repeating a registration in the same chat with the same host, job group, condition and delivery mode returns the existing watch. For an array task, supply a member ID such as `8123_4` or its allocation ID. To watch the whole array, supply the individual member IDs. Each watch fires once.
-
-### Custom reminders
-
-By default the notification contains the structured event, including job IDs, scheduler states, exit codes and the event ID. Tell Codex what to do when the jobs finish to set that group’s reminder in your own words. To use personal default wording, edit `~/.config/codex-slurm-monitor/config.toml`:
-
-```toml
-prompt = ""
-```
-
-An explicit per-watch prompt takes precedence. An explicitly empty string sends only the event. Each watch saves its prompt at registration, so a change to the global default applies to new watches. To change how the Skill registers jobs, edit its instructions and rerun the installer. [Skill instructions](plugins/slurm-monitor/skills/slurm-monitor/SKILL.md)
-
-### Optional settings
-
-The worker polls local Slurm every 30 seconds by default. To watch multiple clusters from one Codex host, add existing SSH aliases to `ssh_hosts`. For example, after setting it to `["cluster-a"]`, say “Watch job 8123 on cluster-a.” Queue queries over SSH must work without interaction. Restart the worker after changing the hosts, polling interval, socket or webhook settings. [Configuration reference](config.toml)
-
-The default delivery mode is `codex`. Choose `pull` for manual lookup or `webhook` to send JSON to the `webhook_url` in your personal configuration. Set `webhook_secret` to sign the raw request body with HMAC-SHA256. The signature header is `X-Slurm-Monitor-Signature: sha256=…`. The worker retries explicit transient HTTP errors a limited number of times. A lost connection after sending produces an `uncertain` receipt. Receivers should deduplicate by `event_id`. The URL, signing secret and proxy address belong in the personal configuration file.
-
-### Operation and recovery
-
-- **Linux.** Check `systemctl --user status codex-slurm-monitor`, restart with `systemctl --user restart codex-slurm-monitor`, and read logs with `journalctl --user -u codex-slurm-monitor`. If the service must survive SSH logout, enable user lingering according to your cluster’s policy.
-- **macOS.** Restart with `launchctl kickstart -k "gui/$(id -u)/org.codex.slurm-monitor"`. Logs are in `~/.local/share/codex-slurm-monitor/worker.log`.
-- **Other process managers.** Set `manage_service = False` at the top of the installer and run the worker command it prints under your process manager.
-- **Offline nodes.** Prepare a directory of wheels on an online machine with the same operating system, CPU architecture and Python version. Include the package dependencies, setuptools and wheel. Run the installer with `PIP_NO_INDEX=1` and `PIP_FIND_LINKS` pointing to that directory.
-
-The MCP tools and the worker share a per-user SQLite database. When a job disappears from the queue, the worker waits for a matching `sacct` record before emitting a terminal event. Accounting delays and query errors appear as `UNKNOWN`. The scheduler state and exit code describe job execution. Assessing scientific convergence requires examining the output. [Slurm job states](https://slurm.schedmd.com/job_state_codes.html) · [sacct fields](https://slurm.schedmd.com/sacct.html)
-
-The database stores the event, delivery receipt and acknowledgement separately. The worker waits when the target chat is busy. After a restart it checks the message ID, queue and chat history before delivering. If it cannot establish whether a notification arrived, it records `uncertain` for review. The service reads Slurm state and manages notifications. Job submission, reruns and scheduler cancellation are outside its interface.
-
-### Uninstall
-
-On Linux, first run `systemctl --user disable --now codex-slurm-monitor`. On macOS, run `launchctl bootout "gui/$(id -u)/org.codex.slurm-monitor"`. Then remove the plugin and its marketplace:
-
-```sh
-codex plugin remove slurm-monitor@slurm-tools
-codex plugin marketplace remove slurm-tools
-```
-
-Personal configuration is in `~/.config/codex-slurm-monitor/`. The runtime and history are in `~/.local/share/codex-slurm-monitor/`. If several cluster nodes share the same home directory, run the worker on one designated host. When migrating from an older service, register the jobs you still want to watch and cancel the corresponding old reminders to avoid duplicate notifications.
-
-### Tests
-
-From the repository root, run `python -m pytest -q data/tests` in an environment with the dependencies and pytest installed. The tests use temporary databases and isolated scheduler, chat and webhook responses.
