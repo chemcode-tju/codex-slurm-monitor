@@ -1,0 +1,8 @@
+poll_seconds = 30
+local_host = "local"
+ssh_hosts = []
+control_socket = "~/.codex/app-server-control/app-server-control.sock"
+prompt = ""
+webhook_url = ""
+webhook_secret = ""
+webhook_proxy = ""

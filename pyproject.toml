@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codex-slurm-monitor"
+version = "1.0.0"
+description = "Persistent Slurm notifications for the originating Codex chat"
+requires-python = ">=3.11"
+dependencies = ["pydantic>=2,<3", "websockets>=14,<19"]
+
+[tool.setuptools]
+packages = ["slurm_monitor"]
+
+[tool.setuptools.package-data]
+slurm_monitor = ["panel.html"]

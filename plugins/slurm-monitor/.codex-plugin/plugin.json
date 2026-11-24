@@ -1,0 +1,9 @@
+{
+  "name": "slurm-monitor",
+  "version": "1.0.0",
+  "description": "Notify the originating Codex chat when Slurm jobs finish.",
+  "license": "MIT",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {"displayName": "Slurm Monitor", "shortDescription": "Slurm job notifications"}
+}
